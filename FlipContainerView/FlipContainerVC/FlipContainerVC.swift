@@ -58,6 +58,11 @@ class FlipContainerVC<Front: UIViewController, Back: UIViewController>: UIViewCo
     var flipsInfinitely: Bool
     var sensitivity: CGFloat
 
+    // flip sensitivity, i.e. pan distance to make single 90 degree flip
+    private var distance90Degree: CGFloat {
+        return view.frame.width / sensitivity
+    }
+
     private let timingParameters: UISpringTimingParameters = .init(dampingRatio: 0.25, initialVelocity: .zero)
     private var flipAnimator: UIViewPropertyAnimator
     private var tempAnimator: UIViewPropertyAnimator? // needed in case of changing animation duration mid animator's running
@@ -69,9 +74,10 @@ class FlipContainerVC<Front: UIViewController, Back: UIViewController>: UIViewCo
 
         set {
             let newAnimator: UIViewPropertyAnimator = .init(duration: newValue, timingParameters: timingParameters)
-            if flipAnimator.isRunning {
+            switch flipAnimator.isRunning {
+            case true:
                 tempAnimator = newAnimator
-            } else {
+            case false:
                 flipAnimator = newAnimator
             }
         }
@@ -158,46 +164,50 @@ class FlipContainerVC<Front: UIViewController, Back: UIViewController>: UIViewCo
             toState = .front
         }
 
-        let distance90Degree = view.frame.width / sensitivity // flip sensitivity, i.e. pan distance to make single 90 degree flip
         var translation = sender.translation(in: view)
         var x = translation.x
 
         // normalize translation on x axis
-        if !flipsInfinitely {
-            if x.magnitude > 2 * distance90Degree {
-                translation.x = (2 * distance90Degree + pow(x.magnitude - 2 * distance90Degree, 0.75)) * (x > 0 ? 1 : -1) // log10
-                x = translation.x
-            }
-        } else if x.magnitude > 4 * distance90Degree {
-            translation.x = x.remainder(dividingBy: 4 * distance90Degree)
+        translation.x = x.remainder(dividingBy: 4 * distance90Degree)
+        if !flipsInfinitely && x.magnitude > 2 * distance90Degree {
+            translation.x = (2 * distance90Degree + pow(x.magnitude - 2 * distance90Degree, 0.75)) * (x > 0 ? 1 : -1)
         }
+        x = translation.x
 
         switch sender.state {
         case .began:
-            if flipAnimator.isRunning {
+            switch flipAnimator.isRunning {
+            case true:
                 flipAnimator.stopAnimation(false)
                 flipAnimator.finishAnimation(at: .current)
-                let rotationAngle = atan2(containerView.transform3D.m31, containerView.transform3D.m11)
+
+                let rotationAngle = getRotationAngle(ofLayer: containerView.layer)
                 translation.x = (rotationAngle / (.pi / 2)) * distance90Degree
                 sender.setTranslation(translation, in: view)
-                dimView.alpha = translation.x.magnitude / distance90Degree
+
+                updateDimView()
+            case false:
+                break
             }
         case .changed:
             let rotations = Int(x.magnitude / distance90Degree)
-            if rotations == 0 || rotations == 3 {
+            switch rotations {
+            case 0, 3:
                 from.isHidden = false
                 to.isHidden = true
                 from.addSubview(dimView)
-            } else if rotations == 1 || rotations == 2 {
+            case 1, 2:
                 from.isHidden = true
                 to.isHidden = false
                 to.addSubview(dimView)
+            default:
+                return
             }
+
             let xRemainder = x.remainder(dividingBy: 2 * distance90Degree)
             let transform = CATransform3DRotateAndPerspective(-1 / 2000, (xRemainder / distance90Degree) * .pi / 2, 0, 1, 0)
             containerView.transform3D = transform
-            dimView.isReversed = xRemainder < 0
-            dimView.alpha = xRemainder.magnitude / distance90Degree
+            updateDimView()
         case .cancelled:
             fallthrough
         case .ended:
@@ -212,21 +222,32 @@ class FlipContainerVC<Front: UIViewController, Back: UIViewController>: UIViewCo
                 self?.containerView.transform3D = CATransform3DRotateAndPerspective(-1 / 2000, 0, 0, 1, 0)
             }
             flipAnimator.addCompletion { [weak self] _ in
-                if let newAnimator = self?.tempAnimator {
-                    self?.flipAnimator = newAnimator
-                    self?.tempAnimator = nil
-                }
                 displayLink.invalidate()
+
+                guard let newAnimator = self?.tempAnimator else { return }
+
+                self?.flipAnimator = newAnimator
+                self?.tempAnimator = nil
             }
             flipAnimator.startAnimation()
         }
     }
 
-    @objc func updateDimView() {
-        guard let presentation = containerView.layer.presentation() else { return }
+    private func getRotationAngle(ofLayer layer: CALayer) -> CGFloat {
+        return atan2(layer.transform.m31, layer.transform.m11)
+    }
 
-        let distance90Degree = view.frame.width / sensitivity
-        let rotationAngle = atan2(presentation.transform.m31, presentation.transform.m11)
+    @objc private func updateDimView() {
+        let rotationAngle: CGFloat
+        switch flipAnimator.isRunning {
+        case true:
+            guard let presentation = containerView.layer.presentation() else { return }
+
+            rotationAngle = getRotationAngle(ofLayer: presentation)
+        case false:
+            rotationAngle = getRotationAngle(ofLayer: containerView.layer)
+        }
+
         dimView.isReversed = rotationAngle < 0
         dimView.alpha = ((rotationAngle / (.pi / 2)) * distance90Degree).magnitude / distance90Degree
     }

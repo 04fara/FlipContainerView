@@ -11,6 +11,7 @@ Built using XCode 13.1 (Swift 5.5, for iOS 13.0 or later).
 ### TODO:
 - [ ] Include a property to toggle on/off the shadow;
 - [ ] Include more customization options for UISpringTimingParameters of the flip animation;
+- [ ] Include unit and UI tests;
 
 ### How to run:
 
