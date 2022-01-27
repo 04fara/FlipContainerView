@@ -115,7 +115,7 @@ class FlipContainerVC<Front: UIViewController, Back: UIViewController>: UIViewCo
         frontView.isHidden = false
         backView.isHidden = true
 
-        // MARK: FIXME should gestureRecognizers be stored as properties?
+        // MARK: should gestureRecognizers be stored as properties?
         let panRecognizer: UIPanGestureRecognizer = .init(target: self, action: #selector(handlePan(_:)))
         view.addGestureRecognizer(panRecognizer)
     }
@@ -165,14 +165,7 @@ class FlipContainerVC<Front: UIViewController, Back: UIViewController>: UIViewCo
         }
 
         var translation = sender.translation(in: view)
-        var x = translation.x
-
-        // normalize translation on x axis
-        translation.x = x.remainder(dividingBy: 4 * distance90Degree)
-        if !flipsInfinitely && x.magnitude > 2 * distance90Degree {
-            translation.x = (2 * distance90Degree + pow(x.magnitude - 2 * distance90Degree, 0.75)) * (x > 0 ? 1 : -1)
-        }
-        x = translation.x
+        let x = normalizeTranslationX(translation.x)
 
         switch sender.state {
         case .began:
@@ -233,10 +226,6 @@ class FlipContainerVC<Front: UIViewController, Back: UIViewController>: UIViewCo
         }
     }
 
-    private func getRotationAngle(ofLayer layer: CALayer) -> CGFloat {
-        return atan2(layer.transform.m31, layer.transform.m11)
-    }
-
     @objc private func updateDimView() {
         let rotationAngle: CGFloat
         switch flipAnimator.isRunning {
@@ -248,7 +237,23 @@ class FlipContainerVC<Front: UIViewController, Back: UIViewController>: UIViewCo
             rotationAngle = getRotationAngle(ofLayer: containerView.layer)
         }
 
-        dimView.isReversed = rotationAngle < 0
-        dimView.alpha = ((rotationAngle / (.pi / 2)) * distance90Degree).magnitude / distance90Degree
+        let alpha = rotationAngle / (.pi / 2)
+        dimView.setAlpha(alpha)
+    }
+}
+
+extension FlipContainerVC {
+    private func normalizeTranslationX(_ x: CGFloat) -> CGFloat {
+        var _x = x.remainder(dividingBy: 4 * distance90Degree)
+        if !flipsInfinitely && x.magnitude > 2 * distance90Degree {
+            _x = 2 * distance90Degree + pow(x.magnitude - 2 * distance90Degree, 0.55)
+            _x *= x > 0 ? 1 : -1
+        }
+
+        return _x
+    }
+
+    private func getRotationAngle(ofLayer layer: CALayer) -> CGFloat {
+        return atan2(layer.transform.m31, layer.transform.m11)
     }
 }

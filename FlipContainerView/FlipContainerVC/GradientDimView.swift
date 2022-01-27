@@ -75,8 +75,15 @@ class GradientDimView: UIView {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+}
 
+extension GradientDimView {
     private func reverse() {
         swap(&startPoint, &endPoint)
+    }
+
+    func setAlpha(_ alpha: CGFloat) {
+        isReversed = alpha < 0
+        self.alpha = abs(alpha)
     }
 }
